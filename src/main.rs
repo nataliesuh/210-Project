@@ -1,24 +1,51 @@
-mod data; 
+mod data;
+mod graph;
+mod knn;
+mod visualization;
+
+use data::DataLoader;
+use graph::create_graph;
+use knn::find_nearest_teams;
+use visualization::draw_graph;
 use std::error::Error;
+use std::io;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // Define the input and output file paths
-    let datasets = vec![
-        ("game_penalties.csv", "cleaned_game_penalties.csv"),
-        ("game_teams_stats.csv", "cleaned_game_teams_stats.csv"),
-        ("game.csv", "cleaned_game.csv"),
-        ("player_info.csv", "cleaned_player_info.csv"),
-        ("team_info.csv", "cleaned_team_info.csv"),
-    ];
+    let file_path = "game_teams_stats.csv";
 
-    // Load and clean each dataset
-    for (input, output) in &datasets {
-        match data::load_and_clean_csv(input, output) {
-            Ok(_) => println!("Successfully cleaned and saved {}", output),
-            Err(e) => eprintln!("Error processing {}: {}", input, e),
-        }
+    println!("Enter the year for analysis (e.g., 2016):");
+    let mut year = String::new();
+    io::stdin().read_line(&mut year)?;
+    let year = year.trim();
+
+    let data_loader = DataLoader::new(file_path, year);
+    let team_averages = data_loader.load_and_average()?;
+
+    if team_averages.is_empty() {
+        println!("No data found for the year: {}", year);
+        return Ok(());
     }
 
-    println!("All datasets processed successfully.");
+    let (graph, _team_indices) = create_graph(&team_averages);
+
+    draw_graph(&graph, "team_graph.png")?;
+    println!("Graph visualization saved as team_graph.png");
+
+    let neighbors = find_nearest_teams(&team_averages, 3);
+
+    println!("Enter a team ID to see its nearest neighbors (e.g., Bruins):");
+    let mut selected_team = String::new();
+    io::stdin().read_line(&mut selected_team)?;
+    let selected_team = selected_team.trim();
+
+    if let Some(neighbor_list) = neighbors.get(selected_team) {
+        println!("Team: {} -> Nearest Neighbors:", selected_team);
+        for (neighbor, distance) in neighbor_list {
+            println!("Neighbor: {}, Distance: {:.4}", neighbor, distance);
+        }
+    } else {
+        println!("Team ID not found in the data.");
+    }
+
     Ok(())
 }
